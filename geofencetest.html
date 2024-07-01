@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <!-- set info -->
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>Leaflet GeoFence Demo</title>
+
+        <!-- set icon for mobile -->
+        <link rel="shortcut icon" type="image/x-icon" href="docs/images/favicon.ico" />
+
+        <!-- load leaflet -->
+        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.8.0/dist/leaflet.css" integrity="sha512-hoalWLoI8r4UszCkZ5kL8vayOGVae1oxXe/2A4AO6J9+580uKHDO3JdHb7NzwwzK5xr/Fs0W40kiNHxM9vyTtQ==" crossorigin=""/>
+        <script src="https://unpkg.com/leaflet@1.8.0/dist/leaflet.js" integrity="sha512-BB3hKbKWOc9Ez/TAwyWxNXeoV9c1v6FIeYiBieIWkpLjauysF18NzgR1MBNBXf8/KABdlkX68nAhlwcDFLGPCQ==" crossorigin=""></script>
+
+        <!-- load turf -->
+        <script src='https://unpkg.com/@turf/turf@6.3.0/turf.min.js'></script> 
+
+        <!-- set CSS -->
+        <style>
+            html, body {
+                height: 100%;
+                margin: 0;
+            }
+            .leaflet-container {
+                height: 400px;
+                width: 600px;
+                max-width: 100%;
+                max-height: 100%;
+            }
+            body { 
+                padding: 0; 
+                margin: 0; 
+            } 
+            #map { 
+                height: 100%; 
+                width: 100vw; 
+            }
+        </style>
+    </head>
+    <body>
+
+        <!-- div for the map -->
+        <div id='map'></div>
+
+        <!-- JavaScript -->
+        <script>
+
+            // setup map
+            let map = L.map('map').fitWorld();
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+            }).addTo(map);
+
+            // flag
+            let flag = false;
+
+            // TESTING: counter variable
+            let counter = 0;
+
+            // holds the geoJSON layer for the geofence
+            let geoJSON;
+
+
+            /**
+             * Listener for new location
+             * 
+             * THIS RUNS A DEMO IN WHICH WE GO THROUGH 4 STEPS:
+             * 
+             * - ENTER THE GEOFENCE (counter == 0)
+             * - STAY IN THE GEOFENCE (counter == 1)
+             * - EXIT THE GEOFENCE (counter == 2)
+             * - STAY OUTSIDE THE GEOFENCE (counter == 3)
+             * - RE-ENTER THE GEOFENCE (counter == 4)
+             * 
+             * This is achieved by recursively calling itself (to simulate new locations found - you 
+             *  will want to disable this for mobile!)
+             */
+            function onLocationFound(e) {
+
+                // add a marker
+                const locationMarker = L.marker(e.latlng).addTo(map);
+
+                // make a geofence around the current location
+                let point = turf.point([e.latlng.lng, e.latlng.lat]);
+                
+                let fencepoint = turf.point([5.9878, 51.1913]);
+                const geofence = turf.buffer(fencepoint, 1000, {'units':"metres"});
+                
+                // TESTING: add to the map (and remove previous one to avoid accumulation)
+                if (geoJSON) map.removeLayer(geoJSON);
+                geoJSON = L.geoJSON(geofence).addTo(map);
+
+                // TESTING: on the third go, move the point out of the geofence
+                if (counter == 2 || counter == 3 ){
+                    point = turf.point([e.latlng.lng + 1, e.latlng.lat+1]);
+                }
+
+                // are we in the geofence?
+                const currentlyWithin = turf.booleanWithin(point, geofence);
+                
+                // TESTING: report current point location and "within" status
+                console.log(point.geometry.coordinates, currentlyWithin);
+
+                // if we were NOT within the buffer at the last location
+                if (!flag) {
+
+                    // enter the geofence
+                    if (currentlyWithin){
+                        console.log(counter.toString() + ": entered the geofence");
+
+                        /* do something here (popups etc...) */
+                                // Assuming you have the current location coordinates stored in variables
+                        let currentLatitude = e.latlng.lat; // replace with actual latitude
+                        let currentLongitude = e.latlng.lng; // replace with actual longitude
+
+                        // Create a Leaflet popup
+                        L.popup()
+                        .setLatLng([currentLatitude, currentLongitude])
+                        .setContent("You have entered the geofence!")
+                        .openOn(map);
+                        
+                        // update the flag
+                        flag = true;
+                    
+                    // still outside the geofence
+                    } else {
+                        console.log(counter.toString() + ": still outside the geofence");
+                    }
+
+                // if we WERE within the buffer at the last location
+                } else {
+
+                    // still inside the geofence
+                    if (currentlyWithin) {
+                        console.log(counter.toString() + ": still inside the geofence");
+                    
+                    // leave the geofence
+                    } else {
+                        console.log(counter.toString() + ": exited the geofence");
+                    }
+
+                    // update the flag
+                    flag = currentlyWithin;
+                }
+
+                // TESTING: increment counter
+                counter++;
+
+                // TESTING: call onLocationFound again up to 3 times
+                if (counter < 5) onLocationFound(e);
+            }
+
+            /**
+             * Listener for location error
+             */
+            function onLocationError(e) {
+                alert(e.message);
+            }
+
+            // bind listeners
+            map.on('locationfound', onLocationFound);
+            map.on('locationerror', onLocationError);
+
+            // start listening for user location using geolocation API
+            map.locate({setView: true, maxZoom: 16});
+        </script>
+
+    </body>
+</html>
